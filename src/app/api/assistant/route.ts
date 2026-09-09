@@ -177,7 +177,7 @@ async function fetchGemini(url: string, payload: object) {
 }
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY_1 || process.env.GEMINI_API_KEY_B ||  AQ.Ab8RN6JGP_qt-jtJdYlr1ptbZo17lQFtBMY3YjViQKHxgz9_1A || AQ.Ab8RN6KIR_Vkn2VFXTmao0TlFFf3CwLuJEpGxWvw6YAR0LQplA;
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY_1 || process.env.GEMINI_API_KEY_B 
 
   if (!apiKey) {
     return NextResponse.json(
