@@ -177,6 +177,7 @@ export const PERSONAS = [
   { id: 'persona-farmer', key: 'farmer', label: 'Farmer', description: 'Crop planning — rain, soil, humidity, frost', icon: '🌱', color: 'success' },
   { id: 'persona-marine', key: 'marine', label: 'Marine', description: 'Sea conditions — waves, wind, visibility', icon: '⛵', color: 'accent' },
   { id: 'persona-aviation', key: 'aviation', label: 'Aviation', description: 'Flight safety — turbulence, visibility, icing', icon: '✈️', color: 'primary' },
+  { id: 'persona-researcher', key: 'researcher', label: 'Researcher', description: 'Climate trends — datasets, anomalies, extremes', icon: '🔬', color: 'accent' },
 ];
 
 export const LANGUAGES = [
@@ -191,3 +192,194 @@ export const LANGUAGES = [
   { id: 'lang-gu', code: 'gu', label: 'Gujarati', native: 'ગુજરાતી' },
   { id: 'lang-or', code: 'or', label: 'Odia', native: 'ଓଡ଼ିଆ' },
 ];
+
+/**
+ * Refresh the prototype data in-place so every full page reload presents a
+ * fresh operational snapshot. This is still simulated data until wired to
+ * IMD/NDMA/other live providers, but no dashboard value remains frozen.
+ */
+export function refreshDemoData() {
+  const now = new Date();
+  const seed = now.getTime();
+  const random = (min: number, max: number) => min + Math.random() * (max - min);
+  const round = (value: number, digits = 0) => Number(value.toFixed(digits));
+  const iso = now.toISOString();
+  const hour = now.getHours();
+  const phase = Math.sin(seed / 5400000);
+  const city = DEMO_LOCATIONS[Math.floor(Math.random() * DEMO_LOCATIONS.length)];
+  const baseTemp = round(25 + random(0, 12));
+  const rainProb = round(random(8, 88));
+  const wind = round(random(8, 42));
+  const riskBase = round(random(32, 86));
+  const humidity = round(random(45, 88));
+  const pressure = round(random(996, 1016));
+  const feelsLike = baseTemp + round(random(1, 5));
+  const conditions = ['Clear', 'Partly Cloudy', 'Cloudy', 'Rain', 'Thunderstorm', 'Heavy Rain'];
+  const condition = conditions[Math.floor(random(0, conditions.length))];
+
+  Object.assign(DEMO_WEATHER, {
+    location: city.name,
+    state: city.state,
+    lat: city.lat,
+    lng: city.lng,
+    temp: baseTemp,
+    feelsLike,
+    condition,
+    conditionCode: condition.toLowerCase().replace(/\s+/g, '-'),
+    humidity,
+    windSpeed: wind,
+    windDir: ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.floor(random(0, 8))],
+    visibility: round(random(4.5, 12), 1),
+    pressure,
+    uvIndex: round(random(2, 10)),
+    precipitation: round(random(0, 18), 1),
+    dewPoint: Math.max(10, baseTemp - round(random(2, 7))),
+    cloudCover: round(random(15, 95)),
+    lastUpdated: iso,
+    source: `IMD ${city.name} Observation`,
+  });
+
+  const riskCategories = [
+    ['Rain', rainProb],
+    ['Flood', round(rainProb * random(0.45, 0.8))],
+    ['Lightning', round(random(20, 94))],
+    ['Heat', round(random(20, 92))],
+    ['Wind', round(random(18, 72))],
+    ['Cyclone', round(random(8, 50))],
+    ['AQI', round(random(25, 82))],
+    ['Fog', round(random(5, 44))],
+  ];
+  DEMO_RISK.breakdown.splice(
+    0,
+    DEMO_RISK.breakdown.length,
+    ...riskCategories.map(([category, score], i) => ({
+      id: `risk-${String(category).toLowerCase()}`,
+      category,
+      score: Number(score),
+      trend: (i % 3 === 0 ? 'up' : i % 3 === 1 ? 'stable' : 'down') as 'up' | 'stable' | 'down',
+      severity: Number(score) >= 75 ? 'High' : Number(score) >= 45 ? 'Moderate' : 'Low',
+    })),
+  );
+  DEMO_RISK.overall = riskBase;
+  DEMO_RISK.label = riskBase >= 75 ? 'High' : riskBase >= 50 ? 'Moderate' : 'Low';
+  DEMO_RISK.explanation = `Risk changed with the latest simulated snapshot for ${city.name}: rain probability ${rainProb}%, wind ${wind} km/h, humidity ${humidity}%, and apparent temperature ${feelsLike}°C.`;
+  DEMO_RISK.lastUpdated = iso;
+
+  const startHour = hour;
+  DEMO_HOURLY_FORECAST.splice(
+    0,
+    DEMO_HOURLY_FORECAST.length,
+    ...Array.from({ length: 12 }, (_, i) => {
+      const h = (startHour + i) % 24;
+      const temp = Math.max(20, round(baseTemp - i * 0.55 + phase * 1.4 + random(-1, 1)));
+      const probability = Math.min(95, Math.max(3, round(rainProb - i * 4 + random(-10, 10))));
+      return {
+        id: `hr-${i}`,
+        time: `${String(h).padStart(2, '0')}:00`,
+        temp,
+        feelsLike: temp + round(random(1, 4)),
+        rain: round(probability * random(0.2, 0.75)),
+        rainProb: probability,
+        windSpeed: Math.max(5, round(wind + i * random(-0.3, 0.7))),
+        condition: conditions[(i + Math.floor(seed / 3600000)) % conditions.length],
+        icon: probability > 70 ? 'rain-heavy' : probability > 40 ? 'rain' : 'cloud-sun',
+      };
+    }),
+  );
+
+  DEMO_TEMP_TREND.splice(
+    0,
+    DEMO_TEMP_TREND.length,
+    ...Array.from({ length: 10 }, (_, i) => {
+      const h = (6 + i * 2) % 24;
+      const temp = Math.max(18, round(baseTemp - 4 + Math.sin(i / 2) * 5 + random(-1.2, 1.2)));
+      return { id: `tt-${i}`, time: `${String(h).padStart(2, '0')}:00`, temp, feelsLike: temp + round(random(1, 5)) };
+    }),
+  );
+
+  const aqi = round(random(55, 240));
+  Object.assign(DEMO_AQI, {
+    value: aqi,
+    category: aqi >= 200 ? 'Very Poor' : aqi >= 150 ? 'Unhealthy' : aqi >= 100 ? 'Poor' : 'Moderate',
+    primaryPollutant: ['PM2.5', 'PM10', 'NO₂', 'O₃'][Math.floor(random(0, 4))],
+    pm25: round(random(18, 120), 1),
+    pm10: round(random(35, 190), 1),
+    no2: round(random(12, 75), 1),
+    o3: round(random(20, 110), 1),
+    co: round(random(0.4, 2.4), 1),
+    so2: round(random(4, 22), 1),
+    lastUpdated: iso,
+    source: `CPCB — ${city.name} Monitoring Network`,
+  });
+  DEMO_AQI.recommendation = aqi >= 150 ? 'Reduce prolonged outdoor exertion and consider a well-fitted mask in polluted areas.' : 'Air quality is manageable; sensitive groups should monitor conditions.';
+
+  DEMO_ALERTS.splice(
+    0,
+    DEMO_ALERTS.length,
+    {
+      id: `alert-${seed}`,
+      type: rainProb > 65 ? 'THUNDERSTORM' : 'RAIN',
+      severity: riskBase >= 70 ? 'HIGH' : 'MODERATE',
+      title: `${condition} Advisory — ${city.name}`,
+      agency: 'India Meteorological Department',
+      agencyCode: 'IMD',
+      region: `${city.name}, ${city.state}`,
+      issuedAt: iso,
+      validUntil: new Date(seed + 6 * 60 * 60 * 1000).toISOString(),
+      message: `${condition} conditions are possible around ${city.name}. Rain probability is ${rainProb}% with winds near ${wind} km/h. Monitor official updates and avoid exposed areas during severe weather.`,
+      isDemoAlert: true,
+      color: riskBase >= 70 ? 'danger' : 'warning',
+    },
+    {
+      id: `alert-${seed}-2`,
+      type: 'AIR_QUALITY',
+      severity: aqi >= 150 ? 'HIGH' : 'MODERATE',
+      title: `Air quality advisory — ${city.name}`,
+      agency: 'CPCB',
+      agencyCode: 'CPCB',
+      region: city.name,
+      issuedAt: iso,
+      validUntil: new Date(seed + 12 * 60 * 60 * 1000).toISOString(),
+      message: `AQI is ${aqi}. ${DEMO_AQI.recommendation}`,
+      isDemoAlert: true,
+      color: aqi >= 150 ? 'danger' : 'warning',
+    },
+  );
+
+  const disasterRegions = [`${city.state}`, 'Bay of Bengal', 'Assam, Bihar', 'Uttarakhand, HP', 'Delhi-NCR, UP'];
+  DEMO_DISASTERS.forEach((item, index) => {
+    const score = riskCategories[(index + 1) % riskCategories.length][1] as number;
+    item.severity = score >= 75 ? 'HIGH' : score >= 45 ? 'MODERATE' : 'LOW';
+    item.status = item.severity === 'HIGH' ? 'Active' : item.severity === 'MODERATE' ? 'Warning' : 'Watch';
+    item.region = index === 0 ? 'Bay of Bengal' : disasterRegions[index % disasterRegions.length];
+    item.detail = `${item.type} monitoring updated ${now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })} IST. Conditions may change with the latest forecast cycle.`;
+  });
+
+  Object.assign(DEMO_AI_SUMMARY, {
+    text: `${condition} conditions are developing around ${city.name}. Rain probability is ${rainProb}%, wind ${wind} km/h, and current risk is ${DEMO_RISK.overall}/100 (${DEMO_RISK.label}). AQI is ${aqi}; follow official alerts and local safety guidance.`,
+    confidence: round(random(72, 96)),
+    generatedAt: iso,
+    persona: DEMO_AI_SUMMARY.persona || 'Default',
+  });
+
+  DEMO_SAVED_LOCATIONS.forEach((location, index) => {
+    const t = Math.max(20, round(baseTemp + random(-4, 4) + index));
+    location.temp = t;
+    location.condition = conditions[(index + Math.floor(seed / 1800000)) % conditions.length];
+    location.risk = Math.min(95, Math.max(20, round(DEMO_RISK.overall + random(-18, 18))));
+    location.alertCount = round(random(0, 3));
+  });
+
+  DEMO_MAP_ALERTS.forEach((alert, index) => {
+    alert.lat += random(-0.25, 0.25);
+    alert.lng += random(-0.25, 0.25);
+    alert.severity = index === 0 && DEMO_RISK.overall >= 70 ? 'HIGH' : index % 2 ? 'MODERATE' : 'LOW';
+    alert.title = `${alert.type.replace('_', ' ')} update — ${city.name}`;
+  });
+
+  DEMO_SHELTERS.forEach((shelter) => {
+    shelter.capacity = Math.max(250, round(shelter.capacity + random(-500, 500)));
+    shelter.distance = `${round(random(1.2, 9), 1)} km`;
+    shelter.status = Math.random() > 0.12 ? 'Open' : 'Limited';
+  });
+}
