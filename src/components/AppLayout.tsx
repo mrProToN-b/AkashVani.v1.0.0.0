@@ -2,8 +2,9 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import AppLogo from '@/components/ui/AppLogo';
+import { refreshDemoData } from '@/lib/mockData';
 import {
   LayoutDashboard,
   Map,
@@ -40,9 +41,9 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'nav-disaster', label: 'Disaster Intel', href: '/user-dashboard', icon: <AlertTriangle size={20} /> },
   { id: 'nav-aqi', label: 'Air Quality', href: '/user-dashboard', icon: <Wind size={20} /> },
   { id: 'nav-forecast', label: 'Forecast', href: '/user-dashboard', icon: <CloudRain size={20} /> },
-  { id: 'nav-climate', label: 'Climate', href: '/user-dashboard', icon: <TrendingUp size={20} /> },
+  { id: 'nav-climate', label: 'Climate', href: '/user-dashboard/climate', icon: <TrendingUp size={20} /> },
   { id: 'nav-assistant', label: 'AI Assistant', href: '/user-dashboard/assistant', icon: <MessageSquare size={20} /> },
-  { id: 'nav-sos', label: 'SOS', href: '/user-dashboard', icon: <Zap size={20} />, badgeColor: 'danger' },
+  { id: 'nav-sos', label: 'SOS', href: '/user-dashboard/sos', icon: <Zap size={20} />, badgeColor: 'danger' },
   { id: 'nav-offline', label: 'Offline Mode', href: '/user-dashboard', icon: <Wifi size={20} /> },
 ];
 
@@ -61,9 +62,52 @@ export default function AppLayout({
 }: AppLayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [selectedPersona, setSelectedPersona] = useState(userPersona);
+  const [dataVersion, setDataVersion] = useState(0);
   const pathname = usePathname();
+  const router = useRouter();
 
-  const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/');
+  const PERSONA_OPTIONS = [
+    { label: 'Default', key: 'default', description: 'General weather awareness' },
+    { label: 'Urban', key: 'urban', description: 'City, commute, heat & air quality' },
+    { label: 'Rural', key: 'rural', description: 'Village, storms & infrastructure' },
+    { label: 'Farmer', key: 'farmer', description: 'Crop, rain & field planning' },
+    { label: 'Marine', key: 'marine', description: 'Sea, wind & visibility' },
+    { label: 'Aviation', key: 'aviation', description: 'Flight weather & visibility' },
+    { label: 'Researcher', key: 'researcher', description: 'Climate trends & research data' },
+  ];
+
+  React.useEffect(() => {
+    refreshDemoData();
+    setDataVersion(Date.now());
+    try {
+      const saved = window.localStorage.getItem('akashvani_persona');
+      if (saved) setSelectedPersona(saved);
+    } catch {}
+  }, []);
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        window.localStorage.setItem('akashvani_persona', selectedPersona);
+        const raw = window.localStorage.getItem('akashvani_user');
+        if (raw) {
+          const user = JSON.parse(raw);
+          window.localStorage.setItem('akashvani_user', JSON.stringify({ ...user, persona: selectedPersona }));
+        }
+      } catch {}
+    }
+  }, [selectedPersona]);
+
+  const persona = PERSONA_OPTIONS.find((item) => item.key === selectedPersona) || PERSONA_OPTIONS[0];
+
+  const handlePersonaChange = (key: string) => {
+    setSelectedPersona(key);
+    const target = key === 'researcher' ? '/user-dashboard/climate' : '/user-dashboard';
+    if (pathname !== target) router.push(target);
+  };
+
+  const isActive = (href: string) => href === '/user-dashboard' ? pathname === href : pathname === href || pathname.startsWith(href + '/');
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
@@ -134,13 +178,25 @@ export default function AppLayout({
 
         {/* Persona badge */}
         {!collapsed && (
-          <div className="px-4 py-2 border-t border-border">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Mode:</span>
-              <span className="text-xs font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
-                {userPersona}
-              </span>
-            </div>
+          <div className="px-3 py-2.5 border-t border-border">
+            <label className="block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1.5 px-1">
+              Experience mode
+            </label>
+            <select
+              value={selectedPersona}
+              onChange={(e) => handlePersonaChange(e.target.value)}
+              className="w-full appearance-none rounded-lg border border-border bg-secondary/60 px-3 py-2 text-xs font-semibold text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 cursor-pointer"
+              aria-label="Change AkashVani experience mode"
+            >
+              {PERSONA_OPTIONS.map((item) => (
+                <option key={item.key} value={item.key}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-[10px] text-muted-foreground mt-1.5 px-1 truncate" title={persona.description}>
+              {persona.description}
+            </p>
           </div>
         )}
 
@@ -214,7 +270,9 @@ export default function AppLayout({
 
         {/* Page Content */}
         <main className="flex-1 overflow-y-auto">
-          {children}
+          <div key={dataVersion}>
+            {children}
+          </div>
         </main>
 
         {/* Mobile Bottom Navigation */}

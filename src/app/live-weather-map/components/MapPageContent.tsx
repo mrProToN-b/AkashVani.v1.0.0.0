@@ -122,6 +122,7 @@ export default function MapPageContent() {
         <LeafletMap
           layers={layers}
           timelineIndex={timelineIndex}
+          selectedLocation={selectedLocation}
           onLocationClick={setSelectedLocation}
         />
       </div>

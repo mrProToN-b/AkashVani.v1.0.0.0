@@ -3,7 +3,7 @@ import MapPageContent from './components/MapPageContent';
 
 export default function LiveWeatherMapPage() {
   return (
-    <AppLayout userName="Soumyajit Koley" userPersona="Default" userLocation="Agarpara, Kolkata">
+    <AppLayout userName="Soumyajit Koley" userLocation="Agarpara, Kolkata">
       <MapPageContent />
     </AppLayout>
   );

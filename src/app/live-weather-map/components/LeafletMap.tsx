@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Circle, Polyline, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Circle, Polyline, useMapEvents, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { DEMO_MAP_ALERTS, DEMO_SHELTERS } from '@/lib/mockData';
@@ -58,6 +58,20 @@ function getTempColor(temp: number): string {
   return '#3B82F6';
 }
 
+
+function MapViewportController({ location }: { location: SelectedMapLocation | null }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!location) return;
+    map.flyTo([location.lat, location.lng], Math.max(map.getZoom(), 9), {
+      duration: 0.8,
+    });
+  }, [location, map]);
+
+  return null;
+}
+
 function MapClickHandler({ onLocationClick }: { onLocationClick: (loc: SelectedMapLocation) => void }) {
   useMapEvents({
     click(e) {
@@ -74,10 +88,11 @@ function MapClickHandler({ onLocationClick }: { onLocationClick: (loc: SelectedM
 interface Props {
   layers: MapLayer[];
   timelineIndex: number;
+  selectedLocation: SelectedMapLocation | null;
   onLocationClick: (loc: SelectedMapLocation) => void;
 }
 
-export default function LeafletMap({ layers, timelineIndex, onLocationClick }: Props) {
+export default function LeafletMap({ layers, timelineIndex, selectedLocation, onLocationClick }: Props) {
   const isLayerActive = (id: string) => layers.find((l) => l.id === id)?.active ?? false;
 
   const alertIcon = (color: string) =>
@@ -102,12 +117,22 @@ export default function LeafletMap({ layers, timelineIndex, onLocationClick }: P
       style={{ width: '100%', height: '100%' }}
       zoomControl={false}
     >
-      {/* Base tile layer */}
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
+      {/* Base map: Street or Satellite */}
+      {isLayerActive('layer-satellite') ? (
+        <TileLayer
+          attribution='&copy; Esri, Maxar, Earthstar Geographics, and the GIS User Community'
+          url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+          maxZoom={19}
+        />
+      ) : (
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          maxZoom={19}
+        />
+      )}
 
+      <MapViewportController location={selectedLocation} />
       <MapClickHandler onLocationClick={onLocationClick} />
 
       {/* Temperature overlay circles */}
