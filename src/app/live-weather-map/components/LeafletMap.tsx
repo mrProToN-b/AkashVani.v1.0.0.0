@@ -72,6 +72,58 @@ function MapViewportController({ location }: { location: SelectedMapLocation | n
   return null;
 }
 
+function RouteGuide({ destination }: { destination: SelectedMapLocation | null }) {
+  const map = useMap();
+  const [origin, setOrigin] = React.useState<[number, number] | null>(null);
+  const [route, setRoute] = React.useState<[number, number][]>([]);
+
+  useEffect(() => {
+    if (!destination) return;
+    if (!navigator.geolocation) return;
+
+    navigator.geolocation.getCurrentPosition(async ({ coords }) => {
+      const start: [number, number] = [coords.latitude, coords.longitude];
+      setOrigin(start);
+      setRoute([]);
+
+      try {
+        const response = await fetch(
+          `https://router.project-osrm.org/route/v1/driving/${coords.longitude},${coords.latitude};${destination.lng},${destination.lat}?overview=full&geometries=geojson`,
+          { cache: 'no-store' },
+        );
+        const data = await response.json();
+        const geometry = data?.routes?.[0]?.geometry?.coordinates;
+        if (data?.code === 'Ok' && Array.isArray(geometry) && geometry.length > 1) {
+          const points = geometry.map(([lng, lat]: [number, number]) => [lat, lng] as [number, number]);
+          setRoute(points);
+          map.fitBounds(points, { padding: [40, 40], maxZoom: 15 });
+          return;
+        }
+      } catch {}
+
+      setRoute([start, [destination.lat, destination.lng]]);
+      map.fitBounds([start, [destination.lat, destination.lng]], { padding: [40, 40], maxZoom: 13 });
+    }, () => {
+      map.flyTo([destination.lat, destination.lng], Math.max(map.getZoom(), 12), { duration: 0.8 });
+    }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
+  }, [destination, map]);
+
+  if (!destination) return null;
+  return (
+    <>
+      {origin && (
+        <Marker position={origin} icon={L.divIcon({ className: '', html: '<div style="width:18px;height:18px;border-radius:50%;background:#2563EB;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,.3)"></div>', iconSize: [18, 18], iconAnchor: [9, 9] })}>
+          <Popup>Your live location</Popup>
+        </Marker>
+      )}
+      {route.length > 1 && <Polyline positions={route} pathOptions={{ color: '#2563EB', weight: 5, opacity: 0.8 }} />}
+      <Marker position={[destination.lat, destination.lng]} icon={L.divIcon({ className: '', html: '<div style="width:28px;height:28px;background:#10B981;border:3px solid white;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 8px rgba(0,0,0,.3)"><span style="display:block;transform:rotate(45deg);font-size:13px;text-align:center;line-height:22px">★</span></div>', iconSize: [28, 28], iconAnchor: [14, 28] })}>
+        <Popup><strong>{destination.name}</strong><br />Recommended safe location</Popup>
+      </Marker>
+    </>
+  );
+}
+
 function MapClickHandler({ onLocationClick }: { onLocationClick: (loc: SelectedMapLocation) => void }) {
   useMapEvents({
     click(e) {
@@ -133,6 +185,7 @@ export default function LeafletMap({ layers, timelineIndex, selectedLocation, on
       )}
 
       <MapViewportController location={selectedLocation} />
+      <RouteGuide destination={selectedLocation} />
       <MapClickHandler onLocationClick={onLocationClick} />
 
       {/* Temperature overlay circles */}

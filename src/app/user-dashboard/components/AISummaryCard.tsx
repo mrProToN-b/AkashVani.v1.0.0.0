@@ -9,7 +9,7 @@ import { useVoiceAssistant } from '@/lib/hooks/useVoiceAssistant';
 
 type CardState = 'loading' | 'success' | 'error';
 
-export default function AISummaryCard() {
+export default function AISummaryCard({ persona = 'default' }: { persona?: string }) {
   const [state, setState] = useState<CardState>('loading');
   const [text, setText] = useState('');
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
@@ -23,7 +23,7 @@ export default function AISummaryCard() {
     const result = await summarizeWeather({
       locationName: DEMO_WEATHER.location,
       weather: DEMO_WEATHER,
-      persona: 'Default',
+      persona: persona.charAt(0).toUpperCase() + persona.slice(1),
       language: 'English',
     });
 
@@ -40,7 +40,7 @@ export default function AISummaryCard() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [persona]);
 
   return (
     <div className="bg-card border border-border rounded-2xl p-5 shadow-card h-full flex flex-col">

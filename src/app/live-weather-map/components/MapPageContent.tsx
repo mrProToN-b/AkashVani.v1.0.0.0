@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import MapLayerPanel from './MapLayerPanel';
 import MapTimelineBar from './MapTimelineBar';
@@ -62,6 +62,16 @@ export default function MapPageContent() {
   const [selectedLocation, setSelectedLocation] = useState<SelectedMapLocation | null>(null);
   const [layerPanelOpen, setLayerPanelOpen] = useState(true);
   const [legendOpen, setLegendOpen] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const routeLat = Number(params.get('routeLat'));
+    const routeLng = Number(params.get('routeLng'));
+    const routeName = params.get('routeName');
+    if (Number.isFinite(routeLat) && Number.isFinite(routeLng)) {
+      setSelectedLocation({ lat: routeLat, lng: routeLng, name: routeName || 'Safe location' });
+    }
+  }, []);
 
   const toggleLayer = (id: string) => {
     setLayers((prev) =>

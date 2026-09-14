@@ -3,6 +3,7 @@
 import React from 'react';
 import { MapPin, Home, Briefcase, Heart, Plus, AlertTriangle } from 'lucide-react';
 import { DEMO_SAVED_LOCATIONS } from '@/lib/mockData';
+import { useLiveLocation } from '@/lib/hooks/useLiveLocation';
 
 const LABEL_ICONS: Record<string, React.ReactNode> = {
   Home: <Home size={12} />,
@@ -23,6 +24,8 @@ interface Props {
 }
 
 export default function SavedLocationsBar({ activeLocation, onLocationChange }: Props) {
+  const liveLocation = useLiveLocation('Kolkata');
+
   return (
     <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">
       {DEMO_SAVED_LOCATIONS.map((loc) => (
@@ -38,7 +41,7 @@ export default function SavedLocationsBar({ activeLocation, onLocationChange }: 
           <span className={activeLocation === loc.id ? 'text-primary-foreground/70' : 'text-muted-foreground'}>
             {LABEL_ICONS[loc.label] || <MapPin size={12} />}
           </span>
-          <span className="font-semibold">{loc.label}</span>
+          <span className="font-semibold">{loc.label === 'Home' ? liveLocation : loc.label}</span>
           <span className={`text-xs font-mono-data ${activeLocation === loc.id ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>
             {loc.temp}°
           </span>

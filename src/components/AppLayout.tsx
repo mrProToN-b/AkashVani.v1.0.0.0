@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import AppLogo from '@/components/ui/AppLogo';
-import { refreshDemoData } from '@/lib/mockData';
+import { refreshDemoData, DEMO_ALERTS } from '@/lib/mockData';
+import { UI_LANGUAGES, getStoredLanguage, setStoredLanguage, translatePage } from '@/lib/i18n';
 import {
   LayoutDashboard,
   Map,
@@ -61,10 +62,16 @@ export default function AppLayout({
   userLocation = 'Kolkata',
 }: AppLayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const [liveLocation, setLiveLocation] = useState(userLocation);
+
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedPersona, setSelectedPersona] = useState(userPersona);
   const [dataVersion, setDataVersion] = useState(0);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [languageOpen, setLanguageOpen] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState(getStoredLanguage());
   const pathname = usePathname();
+  const headerRef = React.useRef<HTMLDivElement>(null);
   const router = useRouter();
 
   const PERSONA_OPTIONS = [
@@ -78,6 +85,39 @@ export default function AppLayout({
   ];
 
   React.useEffect(() => {
+    const applyLanguage = () => {
+      const language = getStoredLanguage();
+      setSelectedLanguage(language);
+      translatePage(language.code);
+    };
+    applyLanguage();
+    const onLanguageChange = () => applyLanguage();
+    window.addEventListener('akashvani:language-changed', onLanguageChange);
+    return () => window.removeEventListener('akashvani:language-changed', onLanguageChange);
+  }, []);
+
+  React.useEffect(() => {
+    const handlePointer = (event: MouseEvent) => {
+      if (headerRef.current && !headerRef.current.contains(event.target as Node)) {
+        setNotificationsOpen(false);
+        setLanguageOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointer);
+    return () => document.removeEventListener('mousedown', handlePointer);
+  }, []);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const observer = new MutationObserver(() => {
+      const language = getStoredLanguage();
+      translatePage(language.code);
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
+
+  React.useEffect(() => {
     refreshDemoData();
     setDataVersion(Date.now());
     try {
@@ -85,6 +125,84 @@ export default function AppLayout({
       if (saved) setSelectedPersona(saved);
     } catch {}
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    let watchId: number | null = null;
+    let lastReverseGeocodeAt = 0;
+
+    const applyStoredLocation = () => {
+      try {
+        const raw = window.localStorage.getItem('akashvani_live_location');
+        if (!raw) return;
+        const stored = JSON.parse(raw) as { label?: string };
+        if (stored?.label) setLiveLocation(stored.label);
+      } catch {}
+    };
+
+    const reverseGeocode = async (latitude: number, longitude: number) => {
+      const now = Date.now();
+      // Avoid repeatedly calling the reverse geocoder while GPS is moving.
+      if (now - lastReverseGeocodeAt < 30000) return;
+      lastReverseGeocodeAt = now;
+
+      try {
+        const response = await fetch(`/api/geocode?lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}`, {
+          cache: 'no-store',
+        });
+        if (!response.ok) return;
+        const data = await response.json();
+        const result = data?.result;
+        if (!result) return;
+
+        const locality = result.name || result.city || 'Current location';
+        const parts = [locality, result.state].filter(Boolean);
+        const label = parts.join(', ');
+        if (!label) return;
+
+        setLiveLocation(label);
+        window.localStorage.setItem(
+          'akashvani_live_location',
+          JSON.stringify({
+            label,
+            latitude,
+            longitude,
+            displayName: result.displayName || label,
+            updatedAt: new Date().toISOString(),
+          }),
+        );
+        window.dispatchEvent(new Event('akashvani:live-location-updated'));
+      } catch {}
+    };
+
+    const onPosition = (position: GeolocationPosition) => {
+      void reverseGeocode(position.coords.latitude, position.coords.longitude);
+    };
+
+    applyStoredLocation();
+
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        onPosition,
+        () => {
+          // Keep the supplied location as a graceful fallback when GPS is denied.
+          setLiveLocation((current) => current || userLocation);
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 },
+      );
+
+      watchId = navigator.geolocation.watchPosition(
+        onPosition,
+        () => {},
+        { enableHighAccuracy: true, maximumAge: 60000, timeout: 20000 },
+      );
+    }
+
+    return () => {
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+    };
+  }, [userLocation]);
 
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -103,6 +221,9 @@ export default function AppLayout({
 
   const handlePersonaChange = (key: string) => {
     setSelectedPersona(key);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('akashvani:persona-changed', { detail: key }));
+    }
     const target = key === 'researcher' ? '/user-dashboard/climate' : '/user-dashboard';
     if (pathname !== target) router.push(target);
   };
@@ -134,7 +255,7 @@ export default function AppLayout({
           <div className="px-4 py-2 border-b border-border bg-secondary/40">
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <MapPin size={12} className="text-primary flex-shrink-0" />
-              <span className="truncate font-mono-data">{userLocation}</span>
+              <span className="truncate font-mono-data">{liveLocation}</span>
             </div>
           </div>
         )}
@@ -242,24 +363,87 @@ export default function AppLayout({
           {/* Desktop breadcrumb area */}
           <div className="hidden lg:flex items-center gap-2 text-sm text-muted-foreground">
             <MapPin size={14} className="text-primary" />
-            <span className="font-mono-data text-foreground font-medium">{userLocation}</span>
+            <span className="font-mono-data text-foreground font-medium">{liveLocation}</span>
             <span className="text-border">·</span>
             <span>Updated 5 min ago</span>
           </div>
 
           {/* Right actions */}
-          <div className="flex items-center gap-2">
+          <div ref={headerRef} className="flex items-center gap-2 relative">
             <div className="hidden sm:flex items-center gap-1.5 bg-success/10 text-success text-xs font-semibold px-2.5 py-1.5 rounded-full">
               <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse-slow" />
               Live
             </div>
-            <button className="p-2 rounded-lg hover:bg-secondary transition-colors relative">
+            <button
+              onClick={() => { setNotificationsOpen((value) => !value); setLanguageOpen(false); }}
+              className="p-2 rounded-lg hover:bg-secondary transition-colors relative"
+              aria-label="Notifications"
+              aria-expanded={notificationsOpen}
+            >
               <Bell size={18} className="text-muted-foreground" />
               <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-warning" />
             </button>
-            <button className="p-2 rounded-lg hover:bg-secondary transition-colors">
+            <button
+              onClick={() => { setLanguageOpen((value) => !value); setNotificationsOpen(false); }}
+              className="p-2 rounded-lg hover:bg-secondary transition-colors"
+              aria-label="Language"
+              aria-expanded={languageOpen}
+            >
               <Globe size={18} className="text-muted-foreground" />
             </button>
+
+            {notificationsOpen && (
+              <div className="absolute right-12 top-12 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-card shadow-xl z-50 overflow-hidden">
+                <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Notifications</p>
+                    <p className="text-xs text-muted-foreground">Current alerts</p>
+                  </div>
+                  <button onClick={() => setNotificationsOpen(false)} className="text-xs font-semibold text-muted-foreground hover:text-foreground">Close</button>
+                </div>
+                <div className="max-h-80 overflow-y-auto">
+                  {DEMO_ALERTS.length ? DEMO_ALERTS.slice(0, 5).map((alert) => (
+                    <div key={alert.id} className="px-4 py-3 border-b border-border last:border-b-0 hover:bg-secondary/50 transition-colors">
+                      <div className="flex items-start gap-2">
+                        <div className="mt-1.5 w-2 h-2 rounded-full bg-warning flex-shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{alert.type} · {alert.severity}</p>
+                          <p className="text-sm font-semibold text-foreground mt-0.5">{alert.title}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{alert.message}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )) : (
+                    <div className="px-4 py-8 text-center text-sm text-muted-foreground">No notifications</div>
+                  )}
+                </div>
+                <div className="px-4 py-2.5 border-t border-border">
+                  <Link href="/user-dashboard" onClick={() => setNotificationsOpen(false)} className="text-xs font-semibold text-primary hover:underline">View all alerts</Link>
+                </div>
+              </div>
+            )}
+
+            {languageOpen && (
+              <div className="absolute right-0 top-12 w-72 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-card shadow-xl z-50 overflow-hidden">
+                <div className="px-4 py-3 border-b border-border">
+                  <p className="text-sm font-semibold text-foreground">Language</p>
+                  <p className="text-xs text-muted-foreground">Select language</p>
+                </div>
+                <div className="grid grid-cols-2 gap-1 p-2 max-h-80 overflow-y-auto">
+                  {UI_LANGUAGES.map((language) => (
+                    <button
+                      key={language.id}
+                      onClick={() => { setStoredLanguage(language.code); setSelectedLanguage(language); setLanguageOpen(false); }}
+                      className={`text-left px-3 py-2 rounded-lg transition-colors ${selectedLanguage.code === language.code ? 'bg-primary/10 text-primary' : 'hover:bg-secondary text-foreground'}`}
+                    >
+                      <div className="text-sm font-semibold">{language.native}</div>
+                      <div className="text-[10px] text-muted-foreground">{language.label}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <Link href="/user-dashboard" className="hidden lg:flex">
               <button className="p-2 rounded-lg hover:bg-secondary transition-colors">
                 <Settings size={18} className="text-muted-foreground" />

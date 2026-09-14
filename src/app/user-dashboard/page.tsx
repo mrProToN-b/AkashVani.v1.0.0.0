@@ -3,7 +3,7 @@ import DashboardContent from './components/DashboardContent';
 
 export default function UserDashboardPage() {
   return (
-    <AppLayout userName="Soumyajit Koley" userLocation="Agarpara, Kolkata">
+    <AppLayout userName="Soumyajit Koley" userLocation="Kolkata">
       <DashboardContent />
     </AppLayout>
   );

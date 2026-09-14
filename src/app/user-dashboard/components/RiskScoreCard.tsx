@@ -1,9 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { TrendingUp, Info, ChevronDown, ChevronUp, Minus } from 'lucide-react';
 import { DEMO_RISK } from '@/lib/mockData';
+import { useLiveLocation } from '@/lib/hooks/useLiveLocation';
 
 const RiskRadialChart = dynamic(() => import('./RiskRadialChart'), { ssr: false });
 
@@ -31,6 +32,42 @@ function TrendIcon({ trend }: { trend: string }) {
 
 export default function RiskScoreCard() {
   const risk = DEMO_RISK;
+  const liveLocation = useLiveLocation('Kolkata');
+  const [persona, setPersona] = useState('default');
+
+  useEffect(() => {
+    const readPersona = () => {
+      try {
+        const stored = window.localStorage.getItem('akashvani_persona');
+        if (stored) setPersona(stored);
+      } catch {}
+    };
+    const onPersonaChange = (event: Event) => {
+      const key = (event as CustomEvent<string>).detail;
+      if (typeof key === 'string' && key) setPersona(key);
+      else readPersona();
+    };
+    readPersona();
+    window.addEventListener('akashvani:persona-changed', onPersonaChange);
+    return () => window.removeEventListener('akashvani:persona-changed', onPersonaChange);
+  }, []);
+
+  const riskPriority: Record<string, string[]> = {
+    farmer: ['Rain', 'Flood', 'Lightning', 'Heat'],
+    rural: ['Rain', 'Flood', 'Lightning', 'Wind'],
+    urban: ['Heat', 'AQI', 'Rain', 'Lightning'],
+    marine: ['Wind', 'Cyclone', 'Rain', 'Flood'],
+    aviation: ['Wind', 'Fog', 'Rain', 'Lightning'],
+    default: ['Rain', 'Lightning', 'Heat', 'Wind'],
+  };
+  const prioritizedBreakdown = useMemo(() => {
+    const order = riskPriority[persona] || riskPriority.default;
+    return [...risk.breakdown].sort((a, b) => {
+      const ai = order.indexOf(a.category);
+      const bi = order.indexOf(b.category);
+      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+    }).slice(0, 6);
+  }, [persona, risk.breakdown]);
   const colorClass = RISK_COLORS[risk.color] || 'text-foreground';
   const bgClass = RISK_BG[risk.color] || 'bg-secondary';
 
@@ -39,7 +76,7 @@ export default function RiskScoreCard() {
       <div className="flex items-start justify-between mb-4">
         <div>
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Overall Risk Score</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Agarpara, Kolkata · Updated 5 min ago</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{liveLocation} · Updated 5 min ago</p>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="text-xs font-semibold text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">OBSERVED</span>
@@ -75,7 +112,7 @@ export default function RiskScoreCard() {
 
           {/* Risk breakdown bars */}
           <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
-            {risk.breakdown.slice(0, 6).map((item) => (
+            {prioritizedBreakdown.map((item) => (
               <div key={item.id} className="flex items-center gap-1.5">
                 <TrendIcon trend={item.trend} />
                 <span className="text-xs text-muted-foreground w-14 truncate">{item.category}</span>
